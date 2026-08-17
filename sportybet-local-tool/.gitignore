@@ -1,0 +1,5 @@
+node_modules
+last-ticket-code.txt
+selections.json
+*.log
+.DS_Store

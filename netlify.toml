@@ -1,0 +1,10 @@
+# Repo root has multiple top-level projects (app/ is the Netlify-deployed
+# Next.js platform; sportybet-local-tool/ is a separate local-only script that
+# never deploys anywhere) — `base` tells Netlify which one to actually build.
+[build]
+  base = "app"
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

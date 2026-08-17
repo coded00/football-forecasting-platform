@@ -1,0 +1,13 @@
+[
+  {
+    "homeTeam": "Arsenal",
+    "awayTeam": "Chelsea",
+    "favoredOutcome": "Home",
+    "sportyBetSelection": {
+      "eventId": "sr:match:72498196",
+      "marketId": "1",
+      "outcomeId": "1",
+      "odds": 1.21
+    }
+  }
+]
