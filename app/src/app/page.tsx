@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 const LEAGUES = ["Premier League", "Championship", "League One", "La Liga", "Ligue 1"] as const;
 
@@ -22,10 +23,18 @@ interface ForecastResponse {
   };
 }
 
-export default function MatchAnalysisPage() {
-  const [homeTeam, setHomeTeam] = useState("");
-  const [awayTeam, setAwayTeam] = useState("");
-  const [league, setLeague] = useState<(typeof LEAGUES)[number]>("Premier League");
+function isLeague(value: string | null): value is (typeof LEAGUES)[number] {
+  return LEAGUES.includes(value as (typeof LEAGUES)[number]);
+}
+
+function MatchAnalysisForm() {
+  // Prefilled from League Explorer's "Analyze this match" links
+  // (/?homeTeam=X&awayTeam=Y&league=Z) — not auto-submitted, just prefilled.
+  const params = useSearchParams();
+  const [homeTeam, setHomeTeam] = useState(params.get("homeTeam") ?? "");
+  const [awayTeam, setAwayTeam] = useState(params.get("awayTeam") ?? "");
+  const leagueParam = params.get("league");
+  const [league, setLeague] = useState<(typeof LEAGUES)[number]>(isLeague(leagueParam) ? leagueParam : "Premier League");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ForecastResponse | null>(null);
@@ -57,11 +66,11 @@ export default function MatchAnalysisPage() {
   }
 
   return (
-    <main>
+    <>
       <h1>Match Analysis</h1>
       <p>Live, on-demand statistical forecast — nothing is stored between requests.</p>
       <p>
-        <a href="/sportybet">SportyBet tools →</a>
+        <a href="/leagues">League Explorer →</a> · <a href="/sportybet">SportyBet tools →</a>
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: 360 }}>
@@ -156,6 +165,16 @@ export default function MatchAnalysisPage() {
           <DataSourceStatusTable label={result.awayTeam} rows={result.dataSourceStatus.away} />
         </section>
       )}
+    </>
+  );
+}
+
+export default function MatchAnalysisPage() {
+  return (
+    <main>
+      <Suspense fallback={<p>Loading…</p>}>
+        <MatchAnalysisForm />
+      </Suspense>
     </main>
   );
 }

@@ -55,7 +55,7 @@ export function resolveUnderstatSlug(teamName: string): string {
 // (no cross-league name collisions) and, like the team/match pages, embeds its
 // data directly via __NEXT_DATA__. League IDs below were each verified live
 // against fotmob.com (2026-08-16), not guessed from memory.
-const FOTMOB_LEAGUE_IDS: Record<LeagueName, number> = {
+export const FOTMOB_LEAGUE_IDS: Record<LeagueName, number> = {
   "Premier League": 47,
   Championship: 48,
   "League One": 108,
