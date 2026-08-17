@@ -29,6 +29,7 @@ Feeds ACTIONS.md item 1.1. Ranked top 10 candidate sources for the required matc
 - **Rate limits:** Free = 100 req/day. Paid from $19/mo (Pro, ~7,500 req/day) up to enterprise.
 - **Cost:** Freemium → $19/mo+.
 - **Gaps:** xG/xGA/npxG coverage inconsistent/unconfirmed across leagues and seasons — treat as stats+metadata source, not primary xG source, until verified per league.
+- **Live-tested with a real free-tier key (2026-08-17):** the free plan cannot return current/recent fixtures at all — `/fixtures?team=X&last=N` rejects the `last` param outright, and the season-based alternative (`season=2025`) is restricted to seasons 2022-2024 only. This isn't a per-league gap, it's a structural free-tier limitation with no code workaround short of a paid plan. Team search, transfers, and coach lookups all work fine on the free tier and returned real data (e.g. 301 transfer records for Arsenal). The `/coachs?team=X` query specifically is unreliable for identifying the *current* manager — confirmed it omitted Arsenal's actual manager (Arteta) while returning only historical/youth coaches, even though he's correctly indexed elsewhere in their own data via `/coachs?search=`.
 
 ### 3. FotMob (unofficial internal API)
 - **Fields/depth:** Opta-sourced xG/xA (player + team), lineups, formations, live stats, possession, shots/SoT, corners. Covers all 5 target leagues.
