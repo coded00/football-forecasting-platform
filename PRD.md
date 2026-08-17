@@ -286,7 +286,16 @@ Entirely on Netlify, TypeScript throughout:
 - **Next.js frontend + Netlify Functions** — one deployable. Functions handle the live fetch → compute → forecast pipeline per request (Phases 1-5); the frontend is the Match Analysis screen (Phase 6).
 - **No database, no separate backend service.** Each request is self-contained: fetch what's needed from the four data sources, compute in memory, respond, discard.
 
-Data sources (see DATA_SOURCES.md): football-data.co.uk, API-Football, Understat, and FotMob's unofficial API (flagged risk — its ToS forbids this use; treat as a bridge source, used lightly and not redistributed, until a licensed replacement is affordable).
+Data sources (see DATA_SOURCES.md): football-data.co.uk, API-Football, and FotMob's unofficial API (flagged risk — its ToS forbids this use; treat as a bridge source, used lightly and not redistributed, until a licensed replacement is affordable). Understat was originally in this list too but turned out to be a confirmed dead end during live Phase 6 testing (no longer serves match data to a plain HTTP request) — FotMob was extended to cover all 5 leagues instead of just Championship/League One.
+
+## 34. SportyBet Integration (personal use only)
+
+Added after the fact, for personal use — not part of the original research-platform scope, and a direct reversal of §23's principle (internal Research Forecast ID instead of a bookmaker-specific code). Two directions:
+
+- **Read**: decode an existing SportyBet booking code into its selections, run this system's forecast on whichever ones fall in a covered league, and report whether the analysis agrees with the slip's picks.
+- **Write**: given analysis-recommended selections, produce a new booking code. Confirmed to require an authenticated SportyBet session — no public or guest-accessible way to generate a share code exists — so this runs as a separate local-only tool (browser automation, human-in-the-loop login), never as part of the Netlify-deployed platform. Credentials never touch this system; the user logs into their own account themselves in a real browser window the tool opens.
+
+Verified only against the Nigeria SportyBet site. SportyBet's own Terms of Service on automation could not be retrieved during research (client-rendered, failed to load) — genuinely unverified, not assumed clean. Real-money betting platforms tend to enforce anti-automation more aggressively than sports-stats sites; the realistic worst case of relying on this heavily is account limiting, not a stats site quietly rate-limiting you.
 
 ## Appendix: Metric Reference
 
