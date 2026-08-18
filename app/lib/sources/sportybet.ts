@@ -113,42 +113,73 @@ const SPORTYBET_COMPETITION_LABELS: Record<string, string> = {
   "Ligue 1": "France - Ligue 1",
 };
 
-export async function findSportyBetMatch(
-  homeTeam: string,
-  awayTeam: string,
-  league?: string
-): Promise<PublicMatchListing | undefined> {
+function parseOddsBlock(block: string): { home?: number; draw?: number; away?: number } {
+  const oddsByOutcome: Record<string, number> = {};
+  const oddsMatches = block.matchAll(/marketId=1&(?:amp;)?outcomeId=([123])&(?:amp;)?selected=\d&(?:amp;)?odds=([\d.]+)/g);
+  for (const m of oddsMatches) oddsByOutcome[m[1]] = Number(m[2]);
+  return { home: oddsByOutcome["1"], draw: oddsByOutcome["2"], away: oddsByOutcome["3"] };
+}
+
+function parseTeamsFromBlock(block: string): { homeTeam: string; awayTeam: string } | undefined {
+  const teams = block.match(/m-team-name m-left-text">([^<]+)<\/div>\s*<\/div>\s*<div class="m-away-team[^>]*>\s*<div class="m-team-name m-left-text">([^<]+)</);
+  if (teams) return { homeTeam: teams[1].trim(), awayTeam: teams[2].trim() };
+  // Fallback: simpler two-name extraction if the away-team wrapper markup differs slightly.
+  const names = [...block.matchAll(/m-team-name m-left-text">([^<]+)</g)].map((m) => m[1].trim());
+  if (names.length >= 2) return { homeTeam: names[0], awayTeam: names[1] };
+  return undefined;
+}
+
+async function fetchScopedListingHtml(league?: string): Promise<string | undefined> {
   const response = await fetch(`${BASE_URL}/preMatch?sportId=sr:sport:1&timeId=1`, { headers: HEADERS });
   if (!response.ok) throw new Error(`SportyBet match listing request failed: ${response.status}`);
   const html = await response.text();
 
   const competitionLabel = league ? SPORTYBET_COMPETITION_LABELS[league] : undefined;
+  if (!competitionLabel) return html;
+
   const competitionBlocks = html.split(/(?=m-item-title">)/);
+  return competitionBlocks.find((b) => b.startsWith(`m-item-title">${competitionLabel}`));
+}
 
-  const scopedHtml = competitionLabel
-    ? competitionBlocks.find((b) => b.startsWith(`m-item-title">${competitionLabel}`))
-    : html;
-  if (competitionLabel && !scopedHtml) return undefined; // that competition has no matches in this window
+export async function findSportyBetMatch(
+  homeTeam: string,
+  awayTeam: string,
+  league?: string
+): Promise<PublicMatchListing | undefined> {
+  const scopedHtml = await fetchScopedListingHtml(league);
+  if (!scopedHtml) return undefined; // that competition has no matches in this window
 
-  const blocks = (scopedHtml ?? html).split(/(?=eventId=sr:match:\d+)/).filter((b) => b.includes("eventId=sr:match:"));
+  const blocks = scopedHtml.split(/(?=eventId=sr:match:\d+)/).filter((b) => b.includes("eventId=sr:match:"));
   for (const block of blocks) {
     const idMatch = block.match(/eventId=(sr:match:\d+)/);
     if (!idMatch) continue;
     const lowerBlock = block.toLowerCase();
     if (lowerBlock.includes(homeTeam.toLowerCase()) && lowerBlock.includes(awayTeam.toLowerCase())) {
-      // 1X2 market odds, if this match has one — outcomeId 1/2/3 = home/draw/away
-      // (same inferred mapping as build-ticket's MARKET_1X2 constant).
-      const oddsByOutcome: Record<string, number> = {};
-      const oddsMatches = block.matchAll(/marketId=1&(?:amp;)?outcomeId=([123])&(?:amp;)?selected=\d&(?:amp;)?odds=([\d.]+)/g);
-      for (const m of oddsMatches) oddsByOutcome[m[1]] = Number(m[2]);
-
-      return {
-        eventId: idMatch[1],
-        homeTeam,
-        awayTeam,
-        odds1X2: { home: oddsByOutcome["1"], draw: oddsByOutcome["2"], away: oddsByOutcome["3"] },
-      };
+      return { eventId: idMatch[1], homeTeam, awayTeam, odds1X2: parseOddsBlock(block) };
     }
   }
   return undefined;
+}
+
+// Lists every match SportyBet currently offers for a league, with real team
+// names as SportyBet spells them — the point being nobody has to type a team
+// name in first. Feeds directly into an "auto ticket" flow: pull what's live,
+// analyze all of it, no manual entry.
+export async function listSportyBetMatchesForLeague(league: string): Promise<PublicMatchListing[]> {
+  const scopedHtml = await fetchScopedListingHtml(league);
+  if (!scopedHtml) return [];
+
+  const blocks = scopedHtml.split(/(?=eventId=sr:match:\d+)/).filter((b) => b.includes("eventId=sr:match:"));
+  const matches: PublicMatchListing[] = [];
+  const seenEventIds = new Set<string>();
+
+  for (const block of blocks) {
+    const idMatch = block.match(/eventId=(sr:match:\d+)/);
+    const teams = parseTeamsFromBlock(block);
+    if (!idMatch || !teams || seenEventIds.has(idMatch[1])) continue;
+    seenEventIds.add(idMatch[1]);
+    matches.push({ eventId: idMatch[1], homeTeam: teams.homeTeam, awayTeam: teams.awayTeam, odds1X2: parseOddsBlock(block) });
+  }
+
+  return matches;
 }

@@ -119,6 +119,116 @@ function CodeAnalyzer() {
   );
 }
 
+interface AutoTicketResult {
+  homeTeam: string;
+  awayTeam: string;
+  supported: boolean;
+  reason?: string;
+  favoredOutcome?: string;
+  homeWinProbability?: number;
+  drawProbability?: number;
+  awayWinProbability?: number;
+  sportyBetSelection?: { eventId: string; marketId: string; outcomeId: string; odds?: number };
+}
+
+interface AutoTicketResponse {
+  league: string;
+  matchCount: number;
+  analyzedCount?: number;
+  results: AutoTicketResult[];
+  note?: string;
+}
+
+function AutoTicket() {
+  const [league, setLeague] = useState<League>("Premier League");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<AutoTicketResponse | null>(null);
+
+  async function pull() {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const response = await fetch(`/api/sportybet/auto-ticket?league=${encodeURIComponent(league)}`);
+      const body = await response.json();
+      if (!response.ok) setError(body.error ?? "Something went wrong.");
+      else setData(body);
+    } catch {
+      setError("Request failed — check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const resolvedForLocalTool = (data?.results ?? [])
+    .filter((r): r is AutoTicketResult & { sportyBetSelection: NonNullable<AutoTicketResult["sportyBetSelection"]> } =>
+      Boolean(r.supported && r.sportyBetSelection)
+    )
+    .map((r) => ({ homeTeam: r.homeTeam, awayTeam: r.awayTeam, favoredOutcome: r.favoredOutcome, sportyBetSelection: r.sportyBetSelection }));
+
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <h2>Pull today's board and analyze</h2>
+      <p>No typing — this pulls whatever SportyBet is actually offering for a league right now and analyzes all of it.</p>
+
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <select value={league} onChange={(e) => setLeague(e.target.value as League)} style={{ padding: "0.4rem" }}>
+          {LEAGUES.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={pull} disabled={loading}>
+          {loading ? "Pulling…" : "Pull & analyze"}
+        </button>
+      </div>
+
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
+
+      {data && (
+        <div style={{ marginTop: "1rem" }}>
+          {data.note && <p style={{ color: "#888" }}>{data.note}</p>}
+          {data.matchCount > 0 && (
+            <p>
+              {data.matchCount} match(es) currently listed, {data.analyzedCount} analyzed.
+            </p>
+          )}
+
+          {data.results.map((r, i) => (
+            <div key={i} style={{ border: "1px solid #ddd", borderRadius: 6, padding: "1rem", marginBottom: "1rem" }}>
+              <strong>
+                {r.homeTeam} v {r.awayTeam}
+              </strong>
+              {!r.supported && <p style={{ color: "#888" }}>Not analyzed: {r.reason}</p>}
+              {r.supported && (
+                <p>
+                  Favored: {r.favoredOutcome} (H {((r.homeWinProbability ?? 0) * 100).toFixed(1)}% / D{" "}
+                  {((r.drawProbability ?? 0) * 100).toFixed(1)}% / A {((r.awayWinProbability ?? 0) * 100).toFixed(1)}%)
+                  {r.sportyBetSelection?.odds !== undefined ? ` @ ${r.sportyBetSelection.odds}` : ""}
+                </p>
+              )}
+            </div>
+          ))}
+
+          {resolvedForLocalTool.length > 0 && (
+            <>
+              <h3>selections.json for the local ticket tool</h3>
+              <p>Copy this into a local file and run it with `sportybet-local-tool` (see its README) to generate a new booking code.</p>
+              <textarea
+                readOnly
+                value={JSON.stringify(resolvedForLocalTool, null, 2)}
+                style={{ width: "100%", height: 200, fontFamily: "monospace", fontSize: "0.85rem" }}
+              />
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function TicketBuilder() {
   const [homeTeam, setHomeTeam] = useState("");
   const [awayTeam, setAwayTeam] = useState("");
@@ -171,8 +281,8 @@ function TicketBuilder() {
 
   return (
     <section>
-      <h2>Build a ticket from analysis</h2>
-      <p>Add matches, run our analysis on each, and get SportyBet selections ready for the local ticket tool.</p>
+      <h2>Build a ticket from a hand-picked match</h2>
+      <p>For a specific matchup you already have in mind. For "just show me what's good today," use the board-pull above instead.</p>
 
       <form onSubmit={addMatch} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", maxWidth: 500 }}>
         <input value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} placeholder="Home team" style={{ padding: "0.4rem" }} />
@@ -254,6 +364,7 @@ export default function SportyBetPage() {
         see <code>sportybet-local-tool/README.md</code>.
       </p>
       <CodeAnalyzer />
+      <AutoTicket />
       <TicketBuilder />
     </main>
   );
