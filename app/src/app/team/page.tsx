@@ -25,14 +25,12 @@ interface ProfileResponse {
 function StatsRow({ label, stats }: { label: string; stats: TeamStatsSummary }) {
   return (
     <tr>
-      <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee" }}>{label}</td>
-      <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{stats.matchesPlayed}</td>
-      <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{stats.pointsPerGame.toFixed(2)}</td>
-      <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{stats.goalsForPerGame.toFixed(2)}</td>
-      <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{stats.goalsAgainstPerGame.toFixed(2)}</td>
-      <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>
-        {stats.xgForPerGame !== undefined ? stats.xgForPerGame.toFixed(2) : "—"}
-      </td>
+      <td style={{ fontWeight: 600 }}>{label}</td>
+      <td className="text-center">{stats.matchesPlayed}</td>
+      <td className="text-center">{stats.pointsPerGame.toFixed(2)}</td>
+      <td className="text-center">{stats.goalsForPerGame.toFixed(2)}</td>
+      <td className="text-center">{stats.goalsAgainstPerGame.toFixed(2)}</td>
+      <td className="text-center">{stats.xgForPerGame !== undefined ? stats.xgForPerGame.toFixed(2) : "—"}</td>
     </tr>
   );
 }
@@ -65,63 +63,75 @@ function TeamProfileContent() {
   return (
     <>
       <h1>{name || "Team Profile"}</h1>
-      <p>
-        <a href="/leagues">← League Explorer</a>
-      </p>
 
-      {loading && <p>Loading…</p>}
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {loading && (
+        <div className="card">
+          <div className="skeleton" style={{ width: "100%", height: "8rem" }} />
+        </div>
+      )}
+      {error && <p className="text-error">{error}</p>}
 
       {data && (
         <>
           <h2>Form</h2>
-          <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: "2rem" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", padding: "0.25rem 0.5rem" }}></th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>MP</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>Pts/G</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>GF/G</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>GA/G</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>xG/G</th>
-              </tr>
-            </thead>
-            <tbody>
-              <StatsRow label="Last 5" stats={data.formWindows.last5} />
-              <StatsRow label="Last 10" stats={data.formWindows.last10} />
-              <StatsRow label="Overall" stats={data.formWindows.overall} />
-              <StatsRow label="Home" stats={data.venueSplits.home} />
-              <StatsRow label="Away" stats={data.venueSplits.away} />
-            </tbody>
-          </table>
+          <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th className="text-center">MP</th>
+                  <th className="text-center">Pts/G</th>
+                  <th className="text-center">GF/G</th>
+                  <th className="text-center">GA/G</th>
+                  <th className="text-center">xG/G</th>
+                </tr>
+              </thead>
+              <tbody>
+                <StatsRow label="Last 5" stats={data.formWindows.last5} />
+                <StatsRow label="Last 10" stats={data.formWindows.last10} />
+                <StatsRow label="Overall" stats={data.formWindows.overall} />
+                <StatsRow label="Home" stats={data.venueSplits.home} />
+                <StatsRow label="Away" stats={data.venueSplits.away} />
+              </tbody>
+            </table>
+          </div>
 
-          <p>
-            Momentum: <strong>{data.momentum.score.toFixed(2)}</strong> (positive = trending above season baseline)
-          </p>
+          <div className="card">
+            Momentum:{" "}
+            <strong className={data.momentum.score >= 0 ? "text-success" : "text-error"}>{data.momentum.score.toFixed(2)}</strong>
+            <span className="text-muted"> (positive = trending above season baseline)</span>
+          </div>
 
           <h2>Upcoming fixtures</h2>
-          <ul>
-            {data.upcomingFixtures.map((f) => (
-              <li key={f.id} style={{ marginBottom: "0.4rem" }}>
-                {new Date(f.kickoff).toLocaleString()} — {f.homeTeam} vs {f.awayTeam}{" "}
-                <a
-                  href={`/?homeTeam=${encodeURIComponent(f.homeTeam)}&awayTeam=${encodeURIComponent(f.awayTeam)}&league=${encodeURIComponent(league)}`}
-                >
-                  Analyze →
-                </a>
-              </li>
-            ))}
-            {data.upcomingFixtures.length === 0 && <li>No upcoming fixtures found for this team.</li>}
-          </ul>
+          {data.upcomingFixtures.length === 0 && <div className="empty-state">No upcoming fixtures found for this team.</div>}
+          {data.upcomingFixtures.map((f) => (
+            <div key={f.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>
+                  {f.homeTeam} vs {f.awayTeam}
+                </div>
+                <div className="text-muted" style={{ fontSize: "0.85rem" }}>
+                  {new Date(f.kickoff).toLocaleString()}
+                </div>
+              </div>
+              <a
+                href={`/?homeTeam=${encodeURIComponent(f.homeTeam)}&awayTeam=${encodeURIComponent(f.awayTeam)}&league=${encodeURIComponent(league)}`}
+                className="btn btn-sm"
+              >
+                Analyze →
+              </a>
+            </div>
+          ))}
 
           <h2>Data source status</h2>
-          <ul>
+          <div className="card">
             {data.dataSourceStatus.map((s) => (
-              <li key={s.source} style={{ color: s.error ? "crimson" : "green" }}>
-                {s.source}: {s.matchesFound} matches {s.error ? `(${s.error})` : ""}
-              </li>
+              <div key={s.source} style={{ marginBottom: "0.4rem" }}>
+                {s.source}: {s.matchesFound} matches{" "}
+                <span className={`badge ${s.error ? "badge-error" : "badge-success"}`}>{s.error ?? "ok"}</span>
+              </div>
             ))}
-          </ul>
+          </div>
         </>
       )}
     </>
@@ -130,10 +140,8 @@ function TeamProfileContent() {
 
 export default function TeamProfilePage() {
   return (
-    <main>
-      <Suspense fallback={<p>Loading…</p>}>
-        <TeamProfileContent />
-      </Suspense>
-    </main>
+    <Suspense fallback={<p className="text-muted">Loading…</p>}>
+      <TeamProfileContent />
+    </Suspense>
   );
 }

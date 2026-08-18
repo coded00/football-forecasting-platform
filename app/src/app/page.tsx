@@ -68,98 +68,87 @@ function MatchAnalysisForm() {
   return (
     <>
       <h1>Match Analysis</h1>
-      <p>Live, on-demand statistical forecast — nothing is stored between requests.</p>
-      <p>
-        <a href="/leagues">League Explorer →</a> · <a href="/sportybet">SportyBet tools →</a>
-      </p>
+      <p className="text-muted">Live, on-demand statistical forecast — nothing is stored between requests.</p>
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: 360 }}>
-        <label>
-          Home team
-          <input
-            value={homeTeam}
-            onChange={(e) => setHomeTeam(e.target.value)}
-            placeholder="e.g. Arsenal"
-            required
-            style={{ display: "block", width: "100%", padding: "0.4rem" }}
-          />
-        </label>
-        <label>
-          Away team
-          <input
-            value={awayTeam}
-            onChange={(e) => setAwayTeam(e.target.value)}
-            placeholder="e.g. Chelsea"
-            required
-            style={{ display: "block", width: "100%", padding: "0.4rem" }}
-          />
-        </label>
-        <label>
-          League
-          <select
-            value={league}
-            onChange={(e) => setLeague(e.target.value as (typeof LEAGUES)[number])}
-            style={{ display: "block", width: "100%", padding: "0.4rem" }}
-          >
-            {LEAGUES.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" disabled={loading} style={{ padding: "0.6rem", fontWeight: 600 }}>
+      <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 420 }}>
+        <div className="field-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
+          <label>
+            Home team
+            <input className="input" value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} placeholder="e.g. Arsenal" required />
+          </label>
+          <label>
+            Away team
+            <input className="input" value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} placeholder="e.g. Chelsea" required />
+          </label>
+          <label>
+            League
+            <select className="select" value={league} onChange={(e) => setLeague(e.target.value as (typeof LEAGUES)[number])}>
+              {LEAGUES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
           {loading ? "Fetching and analyzing…" : "Analyze matchup"}
         </button>
       </form>
 
-      {error && (
-        <p style={{ color: "crimson", marginTop: "1.5rem" }}>
-          {error}
-        </p>
+      {loading && (
+        <div className="card">
+          <div className="skeleton" style={{ width: "60%", marginBottom: "0.75rem" }} />
+          <div className="skeleton" style={{ width: "90%", marginBottom: "0.5rem" }} />
+          <div className="skeleton" style={{ width: "40%" }} />
+        </div>
       )}
 
+      {error && <p className="text-error">{error}</p>}
+
       {result && result.panelText && (
-        <section style={{ marginTop: "2rem" }}>
-          <pre style={{ background: "#f4f4f4", padding: "1rem", borderRadius: 6, whiteSpace: "pre-wrap" }}>
-            {result.panelText}
-          </pre>
+        <section>
+          <div className="card">
+            <pre className="panel" style={{ margin: 0, border: "none", padding: 0, background: "none" }}>
+              {result.panelText}
+            </pre>
+          </div>
           <p>{result.explanation}</p>
 
           <h2>Most likely scorelines</h2>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <tbody>
-              {result.forecast.scorelineProbabilities.map((s) => (
-                <tr key={s.scoreline}>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #ddd" }}>{s.scoreline}</td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #ddd" }}>
-                    {(s.probability * 100).toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <tbody>
+                {result.forecast.scorelineProbabilities.map((s) => (
+                  <tr key={s.scoreline}>
+                    <td>{s.scoreline}</td>
+                    <td>{(s.probability * 100).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <h2>Corners &amp; half-goals</h2>
-          <ul>
-            <li>
+          <div className="card">
+            <p>
               Expected corners — {result.homeTeam}: {result.forecast.expectedCorners.home?.toFixed(1) ?? "n/a"}, {result.awayTeam}:{" "}
               {result.forecast.expectedCorners.away?.toFixed(1) ?? "n/a"} (total {result.forecast.expectedCorners.total?.toFixed(1) ?? "n/a"})
-            </li>
-            <li>
+            </p>
+            <p>
               Expected 1st-half goals — {result.homeTeam}: {result.forecast.expectedFirstHalfGoals.home?.toFixed(2) ?? "n/a"},{" "}
               {result.awayTeam}: {result.forecast.expectedFirstHalfGoals.away?.toFixed(2) ?? "n/a"}
-            </li>
-            <li>
+            </p>
+            <p style={{ marginBottom: 0 }}>
               Expected 2nd-half goals — {result.homeTeam}: {result.forecast.expectedSecondHalfGoals.home?.toFixed(2) ?? "n/a"},{" "}
               {result.awayTeam}: {result.forecast.expectedSecondHalfGoals.away?.toFixed(2) ?? "n/a"}
-            </li>
-          </ul>
+            </p>
+          </div>
         </section>
       )}
 
       {result && (
-        <section style={{ marginTop: "2rem" }}>
+        <section>
           <h2>Data source status</h2>
           <DataSourceStatusTable label={result.homeTeam} rows={result.dataSourceStatus.home} />
           <DataSourceStatusTable label={result.awayTeam} rows={result.dataSourceStatus.away} />
@@ -171,11 +160,9 @@ function MatchAnalysisForm() {
 
 export default function MatchAnalysisPage() {
   return (
-    <main>
-      <Suspense fallback={<p>Loading…</p>}>
-        <MatchAnalysisForm />
-      </Suspense>
-    </main>
+    <Suspense fallback={<p className="text-muted">Loading…</p>}>
+      <MatchAnalysisForm />
+    </Suspense>
   );
 }
 
@@ -187,23 +174,23 @@ function DataSourceStatusTable({
   rows: { source: string; matchesFound: number; error: string | null }[];
 }) {
   return (
-    <div style={{ marginBottom: "1rem" }}>
-      <h3 style={{ marginBottom: "0.25rem" }}>{label}</h3>
-      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.9rem" }}>
+    <div className="card" style={{ padding: 0 }}>
+      <h3 style={{ padding: "0.75rem 0.75rem 0" }}>{label}</h3>
+      <table>
         <thead>
           <tr>
-            <th style={{ textAlign: "left", padding: "0.25rem 0.5rem" }}>Source</th>
-            <th style={{ textAlign: "left", padding: "0.25rem 0.5rem" }}>Matches found</th>
-            <th style={{ textAlign: "left", padding: "0.25rem 0.5rem" }}>Status</th>
+            <th>Source</th>
+            <th>Matches found</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.source}>
-              <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee" }}>{r.source}</td>
-              <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee" }}>{r.matchesFound}</td>
-              <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", color: r.error ? "crimson" : "green" }}>
-                {r.error ?? "ok"}
+              <td>{r.source}</td>
+              <td>{r.matchesFound}</td>
+              <td>
+                <span className={`badge ${r.error ? "badge-error" : "badge-success"}`}>{r.error ?? "ok"}</span>
               </td>
             </tr>
           ))}

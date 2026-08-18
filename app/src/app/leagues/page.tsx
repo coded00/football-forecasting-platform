@@ -63,74 +63,84 @@ export default function LeagueExplorerPage() {
   }
 
   return (
-    <main>
+    <>
       <h1>League Explorer</h1>
-      <p>
-        <a href="/">← Match Analysis</a>
-      </p>
 
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
+      <div className="field-row">
         {LEAGUES.map((l) => (
-          <button
-            key={l}
-            onClick={() => load(l)}
-            style={{ padding: "0.4rem 0.8rem", fontWeight: l === league ? 700 : 400 }}
-          >
+          <button key={l} onClick={() => load(l)} className={`btn ${l === league ? "btn-primary" : ""}`}>
             {l}
           </button>
         ))}
       </div>
 
-      {loading && <p>Loading…</p>}
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {loading && (
+        <div className="card">
+          <div className="skeleton" style={{ width: "100%", height: "8rem" }} />
+        </div>
+      )}
+      {error && <p className="text-error">{error}</p>}
+      {!loading && !error && !data && (
+        <div className="empty-state">Pick a league above to see its table and upcoming fixtures.</div>
+      )}
 
       {data && (
         <>
           <h2>Table</h2>
-          <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: "2rem" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", padding: "0.25rem 0.5rem" }}>#</th>
-                <th style={{ textAlign: "left", padding: "0.25rem 0.5rem" }}>Team</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>P</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>W</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>D</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>L</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>GD</th>
-                <th style={{ padding: "0.25rem 0.5rem" }}>Pts</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.table.map((row) => (
-                <tr key={row.id}>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee" }}>{row.position}</td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee" }}>
-                    <a href={teamLink(row.name)}>{row.name}</a>
-                  </td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{row.played}</td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{row.wins}</td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{row.draws}</td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{row.losses}</td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center" }}>{row.goalConDiff}</td>
-                  <td style={{ padding: "0.25rem 0.5rem", borderBottom: "1px solid #eee", textAlign: "center", fontWeight: 600 }}>
-                    {row.points}
-                  </td>
+          <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Team</th>
+                  <th className="text-center">P</th>
+                  <th className="text-center">W</th>
+                  <th className="text-center">D</th>
+                  <th className="text-center">L</th>
+                  <th className="text-center">GD</th>
+                  <th className="text-center">Pts</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.table.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.position}</td>
+                    <td>
+                      <a href={teamLink(row.name)}>{row.name}</a>
+                    </td>
+                    <td className="text-center">{row.played}</td>
+                    <td className="text-center">{row.wins}</td>
+                    <td className="text-center">{row.draws}</td>
+                    <td className="text-center">{row.losses}</td>
+                    <td className="text-center">{row.goalConDiff}</td>
+                    <td className="text-center" style={{ fontWeight: 600 }}>
+                      {row.points}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <h2>Upcoming fixtures</h2>
-          <ul>
-            {data.upcomingFixtures.map((f) => (
-              <li key={f.id} style={{ marginBottom: "0.4rem" }}>
-                {new Date(f.kickoff).toLocaleString()} — {f.homeTeam} vs {f.awayTeam}{" "}
-                <a href={analyzeLink(f.homeTeam, f.awayTeam)}>Analyze →</a>
-              </li>
-            ))}
-          </ul>
+          {data.upcomingFixtures.length === 0 && <div className="empty-state">No upcoming fixtures found.</div>}
+          {data.upcomingFixtures.map((f) => (
+            <div key={f.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>
+                  {f.homeTeam} vs {f.awayTeam}
+                </div>
+                <div className="text-muted" style={{ fontSize: "0.85rem" }}>
+                  {new Date(f.kickoff).toLocaleString()}
+                </div>
+              </div>
+              <a href={analyzeLink(f.homeTeam, f.awayTeam)} className="btn btn-sm">
+                Analyze →
+              </a>
+            </div>
+          ))}
         </>
       )}
-    </main>
+    </>
   );
 }
