@@ -150,6 +150,7 @@ function CodeAnalyzer() {
 interface AutoTicketResult {
   homeTeam: string;
   awayTeam: string;
+  league?: string | null;
   supported: boolean;
   reason?: string;
   favoredOutcome?: string;
@@ -163,9 +164,12 @@ interface AutoTicketResponse {
   league: string;
   matchCount: number;
   analyzedCount?: number;
+  truncatedTo?: number | null;
   results: AutoTicketResult[];
   note?: string;
 }
+
+const ALL_LEAGUES = "All";
 
 // The actual requested flow: analyze EVERYTHING SportyBet has posted for a
 // league (no pre-filtering, no manual entry), let the user pick which
@@ -175,7 +179,7 @@ interface AutoTicketResponse {
 // SportyBet session, which only sportybet-local-tool (running on the user's
 // own machine, with their own login) can do; this is the handoff point.
 function AutoTicket() {
-  const [league, setLeague] = useState<League>("Premier League");
+  const [league, setLeague] = useState<League | typeof ALL_LEAGUES>(ALL_LEAGUES);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AutoTicketResponse | null>(null);
@@ -230,7 +234,8 @@ function AutoTicket() {
       </p>
 
       <div className="field-row">
-        <select className="select" value={league} onChange={(e) => setLeague(e.target.value as League)}>
+        <select className="select" value={league} onChange={(e) => setLeague(e.target.value as League | typeof ALL_LEAGUES)}>
+          <option value={ALL_LEAGUES}>All leagues (everything posted)</option>
           {LEAGUES.map((l) => (
             <option key={l} value={l}>
               {l}
@@ -252,6 +257,12 @@ function AutoTicket() {
       {data && (
         <div>
           {data.note && <p className="text-muted">{data.note}</p>}
+          {data.truncatedTo && (
+            <p className="text-muted">
+              {data.matchCount} matches were on the board — only analyzed the first {data.truncatedTo} to keep this
+              responsive.
+            </p>
+          )}
           {data.matchCount > 0 && (
             <div className="field-row" style={{ justifyContent: "space-between" }}>
               <p className="text-muted" style={{ margin: 0 }}>
@@ -290,6 +301,7 @@ function AutoTicket() {
                 <strong>
                   {r.homeTeam} v {r.awayTeam}
                 </strong>
+                {r.league && <span className="text-muted"> — {r.league}</span>}
                 {!r.supported && <p className="text-muted" style={{ marginBottom: 0 }}>Not analyzed: {r.reason}</p>}
                 {r.supported && (
                   <p style={{ marginBottom: 0 }}>

@@ -3,7 +3,7 @@ import type { LeagueName } from "@lib/config";
 import { computeMomentum } from "@lib/analytics/momentum";
 import { mergeMatches } from "@lib/analytics/mergeMatches";
 import { computeFormWindows } from "@lib/analytics/teamStats";
-import { fetchTeamDataFromAllSources } from "@lib/fetchAll";
+import { fetchTeamDataByName, fetchTeamDataFromAllSources } from "@lib/fetchAll";
 import { predictMatch } from "@lib/prediction/predictMatch";
 import { explainForecast } from "@lib/presentation/explanation";
 import { formatForecastPanel } from "@lib/presentation/forecastPanel";
@@ -14,6 +14,20 @@ const VALID_LEAGUES: LeagueName[] = ["Premier League", "Championship", "League O
 
 function isValidLeague(value: unknown): value is LeagueName {
   return typeof value === "string" && (VALID_LEAGUES as string[]).includes(value);
+}
+
+// "General" (no league, or a league string we don't have a fixed config for)
+// resolves via FotMob's global team search instead of requiring one of the 5
+// configured leagues — see fetchAll.ts's fetchTeamDataByName. Covers any real
+// club (confirmed live against Argentine, Egyptian, Japanese clubs), just with
+// fewer corroborating sources unless the team happens to land in one of the 5
+// enhanced leagues.
+async function resolveTeam(teamName: string, requestedLeague: unknown) {
+  if (isValidLeague(requestedLeague)) {
+    return { results: await fetchTeamDataFromAllSources(teamName, requestedLeague), resolvedLeague: requestedLeague };
+  }
+  const general = await fetchTeamDataByName(teamName);
+  return { results: general.results, resolvedLeague: general.resolvedLeague, fotmobLeagueName: general.fotmobLeagueName };
 }
 
 // PRD §27's Data Source Status — which of the (up to 4) sources actually
@@ -32,27 +46,21 @@ export async function POST(request: NextRequest) {
   const awayTeam = body?.awayTeam;
   const league = body?.league;
 
-  if (
-    typeof homeTeam !== "string" ||
-    !homeTeam.trim() ||
-    typeof awayTeam !== "string" ||
-    !awayTeam.trim() ||
-    !isValidLeague(league)
-  ) {
-    return NextResponse.json(
-      { error: `homeTeam, awayTeam (non-empty strings), and league (one of ${VALID_LEAGUES.join(", ")}) are required` },
-      { status: 400 }
-    );
+  if (typeof homeTeam !== "string" || !homeTeam.trim() || typeof awayTeam !== "string" || !awayTeam.trim()) {
+    return NextResponse.json({ error: "homeTeam and awayTeam (non-empty strings) are required" }, { status: 400 });
   }
 
-  const [homeResults, awayResults] = await Promise.all([
-    fetchTeamDataFromAllSources(homeTeam, league),
-    fetchTeamDataFromAllSources(awayTeam, league),
-  ]);
+  const [home, away] = await Promise.all([resolveTeam(homeTeam, league), resolveTeam(awayTeam, league)]);
+  const homeResults = home.results;
+  const awayResults = away.results;
 
   const homeMerged = mergeMatches(homeResults);
   const awayMerged = mergeMatches(awayResults);
   const sourceStatus = { home: dataSourceStatus(homeResults), away: dataSourceStatus(awayResults) };
+  const resolution = {
+    home: { league: home.resolvedLeague ?? null, fotmobLeagueName: home.fotmobLeagueName ?? null },
+    away: { league: away.resolvedLeague ?? null, fotmobLeagueName: away.fotmobLeagueName ?? null },
+  };
 
   if (homeMerged.length === 0 || awayMerged.length === 0) {
     return NextResponse.json(
@@ -83,7 +91,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     homeTeam,
     awayTeam,
-    league,
+    resolution,
     forecast,
     confidence,
     explanation,

@@ -4,6 +4,12 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 const LEAGUES = ["Premier League", "Championship", "League One", "La Liga", "Ligue 1"] as const;
+const GENERAL = "General (any team, worldwide)";
+
+interface TeamResolution {
+  league: string | null;
+  fotmobLeagueName: string | null;
+}
 
 interface ForecastResponse {
   homeTeam: string;
@@ -11,6 +17,7 @@ interface ForecastResponse {
   panelText: string;
   explanation: string;
   confidence: number;
+  resolution: { home: TeamResolution; away: TeamResolution };
   forecast: {
     scorelineProbabilities: { scoreline: string; probability: number }[];
     expectedCorners: { home?: number; away?: number; total?: number };
@@ -21,6 +28,12 @@ interface ForecastResponse {
     home: { source: string; matchesFound: number; error: string | null }[];
     away: { source: string; matchesFound: number; error: string | null }[];
   };
+}
+
+function describeResolution(r: TeamResolution): string {
+  if (r.league) return r.league;
+  if (r.fotmobLeagueName) return `${r.fotmobLeagueName} (general search)`;
+  return "unresolved";
 }
 
 function isLeague(value: string | null): value is (typeof LEAGUES)[number] {
@@ -34,7 +47,7 @@ function MatchAnalysisForm() {
   const [homeTeam, setHomeTeam] = useState(params.get("homeTeam") ?? "");
   const [awayTeam, setAwayTeam] = useState(params.get("awayTeam") ?? "");
   const leagueParam = params.get("league");
-  const [league, setLeague] = useState<(typeof LEAGUES)[number]>(isLeague(leagueParam) ? leagueParam : "Premier League");
+  const [league, setLeague] = useState<(typeof LEAGUES)[number] | typeof GENERAL>(isLeague(leagueParam) ? leagueParam : GENERAL);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ForecastResponse | null>(null);
@@ -49,7 +62,7 @@ function MatchAnalysisForm() {
       const response = await fetch("/api/forecast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ homeTeam, awayTeam, league }),
+        body: JSON.stringify(league === GENERAL ? { homeTeam, awayTeam } : { homeTeam, awayTeam, league }),
       });
       const body = await response.json();
       if (!response.ok) {
@@ -82,13 +95,22 @@ function MatchAnalysisForm() {
           </label>
           <label>
             League
-            <select className="select" value={league} onChange={(e) => setLeague(e.target.value as (typeof LEAGUES)[number])}>
+            <select
+              className="select"
+              value={league}
+              onChange={(e) => setLeague(e.target.value as (typeof LEAGUES)[number] | typeof GENERAL)}
+            >
+              <option value={GENERAL}>{GENERAL}</option>
               {LEAGUES.map((l) => (
                 <option key={l} value={l}>
                   {l}
                 </option>
               ))}
             </select>
+            <span className="text-muted" style={{ fontSize: "0.8rem" }}>
+              "General" searches worldwide (any club, any league) — pick a specific league only for the extra
+              corroborating data sources it unlocks.
+            </span>
           </label>
         </div>
         <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
@@ -114,6 +136,10 @@ function MatchAnalysisForm() {
             </pre>
           </div>
           <p>{result.explanation}</p>
+          <p className="text-muted" style={{ fontSize: "0.85rem" }}>
+            {result.homeTeam}: {describeResolution(result.resolution.home)} · {result.awayTeam}:{" "}
+            {describeResolution(result.resolution.away)}
+          </p>
 
           <h2>Most likely scorelines</h2>
           <div className="card" style={{ padding: 0 }}>

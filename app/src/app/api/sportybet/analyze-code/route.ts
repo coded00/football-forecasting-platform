@@ -1,55 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { LeagueName } from "@lib/config";
 import { mergeMatches } from "@lib/analytics/mergeMatches";
-import { fetchTeamDataFromAllSources } from "@lib/fetchAll";
+import { fetchTeamDataByName } from "@lib/fetchAll";
 import { predictMatch } from "@lib/prediction/predictMatch";
 import { formatForecastPanel } from "@lib/presentation/forecastPanel";
 import { computeModelConfidence } from "@lib/presentation/modelConfidence";
 import { decodeBookingCode, type SportyBetSelection } from "@lib/sources/sportybet";
-import { fetchFootballDataMatches } from "@lib/sources/footballData";
 
-const SUPPORTED_LEAGUES: LeagueName[] = ["Premier League", "Championship", "League One", "La Liga", "Ligue 1"];
-
-// Our system only covers 5 leagues; a real SportyBet slip can include matches
-// from anywhere. This is a best-effort, cheap detector (football-data.co.uk
-// only — no API-Football/FotMob calls) used purely to figure out which
-// selections we can actually run our pipeline against, not a general-purpose
-// league classifier.
-async function detectSupportedLeague(homeTeam: string, awayTeam: string): Promise<LeagueName | undefined> {
-  const results = await Promise.all(
-    SUPPORTED_LEAGUES.map(async (league) => {
-      try {
-        const homeMatches = await fetchFootballDataMatches(homeTeam, league, 1);
-        if (homeMatches.length === 0) return undefined;
-        const awayMatches = await fetchFootballDataMatches(awayTeam, league, 1);
-        return awayMatches.length > 0 ? league : undefined;
-      } catch {
-        return undefined;
-      }
-    })
-  );
-  return results.find((l): l is LeagueName => l !== undefined);
-}
-
+// General resolution (fetchAll.ts's fetchTeamDataByName) replaced the old
+// football-data.co.uk-only 5-league probe here — a real SportyBet slip can
+// include matches from anywhere, and general resolution already covers any
+// club worldwide (confirmed live: Argentine, Egyptian, Japanese clubs), not
+// just our 5 enhanced leagues. It still upgrades to the full multi-source
+// pipeline automatically when a team lands in one of those 5.
 async function analyzeSelection(selection: SportyBetSelection) {
-  const league = await detectSupportedLeague(selection.homeTeam, selection.awayTeam);
-  if (!league) {
+  const [home, away] = await Promise.all([
+    fetchTeamDataByName(selection.homeTeam),
+    fetchTeamDataByName(selection.awayTeam),
+  ]);
+  const homeMerged = mergeMatches(home.results);
+  const awayMerged = mergeMatches(away.results);
+
+  if (homeMerged.length === 0 || awayMerged.length === 0) {
     return {
       selection,
       supported: false,
-      reason: "Match isn't in one of the 5 leagues this system covers (Premier League, Championship, League One, La Liga, Ligue 1)",
+      reason: "Not enough data was found for one or both teams (name mismatch against FotMob, or genuinely no recent matches)",
     };
-  }
-
-  const [homeResults, awayResults] = await Promise.all([
-    fetchTeamDataFromAllSources(selection.homeTeam, league),
-    fetchTeamDataFromAllSources(selection.awayTeam, league),
-  ]);
-  const homeMerged = mergeMatches(homeResults);
-  const awayMerged = mergeMatches(awayResults);
-
-  if (homeMerged.length === 0 || awayMerged.length === 0) {
-    return { selection, supported: false, reason: "Not enough data was found for one or both teams" };
   }
 
   const forecast = predictMatch(homeMerged, awayMerged);
@@ -66,7 +42,7 @@ async function analyzeSelection(selection: SportyBetSelection) {
   return {
     selection,
     supported: true,
-    league,
+    league: home.resolvedLeague ?? home.fotmobLeagueName ?? away.resolvedLeague ?? away.fotmobLeagueName ?? null,
     forecast,
     confidence,
     panelText,

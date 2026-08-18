@@ -164,8 +164,9 @@ export async function findSportyBetMatch(
 // Lists every match SportyBet currently offers for a league, with real team
 // names as SportyBet spells them — the point being nobody has to type a team
 // name in first. Feeds directly into an "auto ticket" flow: pull what's live,
-// analyze all of it, no manual entry.
-export async function listSportyBetMatchesForLeague(league: string): Promise<PublicMatchListing[]> {
+// analyze all of it, no manual entry. Omit `league` to get every match on the
+// board across every competition, not just our 5 configured ones.
+export async function listSportyBetMatchesForLeague(league?: string): Promise<PublicMatchListing[]> {
   const scopedHtml = await fetchScopedListingHtml(league);
   if (!scopedHtml) return [];
 

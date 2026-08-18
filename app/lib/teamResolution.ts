@@ -63,6 +63,16 @@ export const FOTMOB_LEAGUE_IDS: Record<LeagueName, number> = {
   "Ligue 1": 53,
 };
 
+// Reverse of FOTMOB_LEAGUE_IDS — lets the general team-search path (fetchAll.ts)
+// detect "this resolved team happens to be in one of our 5 enhanced leagues"
+// by numeric ID, never by name. League names collide across countries
+// ("League One" is both England and Scotland on FotMob) so name-matching
+// would silently misclassify teams; matching on FotMob's own numeric league
+// ID has no such ambiguity.
+export const FOTMOB_ID_TO_LEAGUE: Record<number, LeagueName> = Object.fromEntries(
+  Object.entries(FOTMOB_LEAGUE_IDS).map(([league, id]) => [id, league as LeagueName])
+);
+
 export async function resolveFotmobTeamId(teamName: string, league: LeagueName): Promise<number> {
   const data = await fetchFotmobNextData(`/leagues/${FOTMOB_LEAGUE_IDS[league]}/overview`);
   const teams: { id: number; name: string; shortName?: string }[] = data?.props?.pageProps?.table?.[0]?.data?.table?.all ?? [];
