@@ -1,4 +1,5 @@
 import type { LeagueName } from "./config";
+import { fetchWithTimeout } from "./httpTimeout";
 import { fetchFotmobNextData } from "./sources/fotmobShared";
 
 // Resolves a canonical team name (whatever the user types/selects) to each
@@ -22,7 +23,7 @@ export async function resolveApiFootballTeamId(teamName: string): Promise<number
   const url = new URL("https://v3.football.api-sports.io/teams");
   url.searchParams.set("search", teamName);
 
-  const response = await fetch(url, { headers: { "x-apisports-key": apiKey() } });
+  const response = await fetchWithTimeout(url, { headers: { "x-apisports-key": apiKey() } });
   if (!response.ok) throw new Error(`API-Football team search failed: ${response.status}`);
 
   const body = (await response.json()) as { response: { team: { id: number; name: string } }[] };

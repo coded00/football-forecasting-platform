@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { LeagueName } from "@lib/config";
+import { computeMomentum } from "@lib/analytics/momentum";
 import { mergeMatches } from "@lib/analytics/mergeMatches";
+import { computeFormWindows } from "@lib/analytics/teamStats";
 import { fetchTeamDataFromAllSources } from "@lib/fetchAll";
 import { predictMatch } from "@lib/prediction/predictMatch";
+import { explainForecast } from "@lib/presentation/explanation";
+import { computeModelConfidence } from "@lib/presentation/modelConfidence";
 import { findSportyBetMatch } from "@lib/sources/sportybet";
 
 const VALID_LEAGUES: LeagueName[] = ["Premier League", "Championship", "League One", "La Liga", "Ligue 1"];
@@ -54,6 +58,21 @@ export async function POST(request: NextRequest) {
         }
 
         const forecast = predictMatch(homeMerged, awayMerged);
+        const confidence = computeModelConfidence(forecast.homeStats, forecast.awayStats, forecast);
+        const homeFormWindows = computeFormWindows(homeMerged);
+        const awayFormWindows = computeFormWindows(awayMerged);
+        const homeMomentum = computeMomentum(homeFormWindows.last5, homeFormWindows.overall);
+        const awayMomentum = computeMomentum(awayFormWindows.last5, awayFormWindows.overall);
+        const explanation = explainForecast(
+          m.homeTeam,
+          m.awayTeam,
+          forecast.homeStats,
+          forecast.awayStats,
+          homeMomentum,
+          awayMomentum,
+          forecast
+        );
+
         const favoredOutcome: "Home" | "Draw" | "Away" =
           forecast.homeWinProbability >= forecast.drawProbability && forecast.homeWinProbability >= forecast.awayWinProbability
             ? "Home"
@@ -66,6 +85,8 @@ export async function POST(request: NextRequest) {
           awayTeam: m.awayTeam,
           league,
           favoredOutcome,
+          confidence,
+          explanation,
           homeWinProbability: forecast.homeWinProbability,
           drawProbability: forecast.drawProbability,
           awayWinProbability: forecast.awayWinProbability,

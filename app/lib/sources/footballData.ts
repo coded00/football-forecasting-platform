@@ -1,4 +1,5 @@
 import type { LeagueName } from "../config";
+import { fetchWithTimeout } from "../httpTimeout";
 import type { NormalizedMatch } from "./types";
 
 // football-data.co.uk has no per-team endpoint — only whole-season CSVs — so a
@@ -86,7 +87,7 @@ export async function fetchFootballDataMatches(
   const rowsPerSeason = await Promise.all(
     seasons.map(async (season) => {
       const url = `https://www.football-data.co.uk/mmz4281/${season}/${code}.csv`;
-      const response = await fetch(url);
+      const response = await fetchWithTimeout(url);
       if (!response.ok) return []; // older/newer seasons may 404 for lower leagues — skip, don't fail the request
       return parseCsv(await response.text());
     })

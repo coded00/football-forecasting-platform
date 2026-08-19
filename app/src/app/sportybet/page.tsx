@@ -1,44 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 const LEAGUES = ["Premier League", "Championship", "League One", "La Liga", "Ligue 1"] as const;
 type League = (typeof LEAGUES)[number];
 
-interface AnalyzedSelection {
-  selection: {
-    homeTeam: string;
-    awayTeam: string;
-    market: string;
-    outcomeLabel: string;
-    odds: number;
-  };
-  supported: boolean;
-  reason?: string;
-  league?: string;
-  panelText?: string;
-  confidence?: number;
-  favoredOutcome?: string;
-  agreesWithSlip?: boolean;
+interface SportyBetSelectionRef {
+  eventId: string;
+  marketId: string;
+  outcomeId: string;
+  odds?: number;
 }
 
-interface AnalyzeCodeResponse {
-  code: string;
-  selectionCount: number;
-  analyzedCount: number;
-  results: AnalyzedSelection[];
-}
-
-interface BuiltSelection {
+interface CartItem {
   homeTeam: string;
   awayTeam: string;
-  league?: string;
-  error?: string;
   favoredOutcome?: string;
-  homeWinProbability?: number;
-  drawProbability?: number;
-  awayWinProbability?: number;
-  sportyBetSelection?: { eventId: string; marketId: string; outcomeId: string; odds?: number };
+  confidence?: number;
+  sportyBetSelection: SportyBetSelectionRef;
+}
+
+// A single ticket shared across all three analysis flows below — you can pull
+// today's board, analyze a booking code, AND hand-pick a match, and "Add to
+// ticket" from any of them lands in the same place. This is the actual
+// requested flow: analyze, click add, then generate one ticket from
+// everything you added — not a separate download per section.
+const CartContext = createContext<{
+  items: CartItem[];
+  add: (item: CartItem) => void;
+  remove: (eventId: string) => void;
+  clear: () => void;
+} | null>(null);
+
+function useCart() {
+  const ctx = useContext(CartContext);
+  if (!ctx) throw new Error("useCart must be used within the ticket cart provider");
+  return ctx;
 }
 
 function downloadJson(filename: string, data: unknown) {
@@ -51,20 +48,112 @@ function downloadJson(filename: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
-function LocalToolHandoff({ count }: { count: number }) {
-  if (count === 0) return null;
+function AddToTicketButton({ item }: { item: CartItem }) {
+  const { items, add } = useCart();
+  const added = items.some((i) => i.sportyBetSelection.eventId === item.sportyBetSelection.eventId);
   return (
-    <div className="card" style={{ background: "var(--color-success-bg)", borderColor: "var(--color-success)" }}>
-      <p style={{ marginBottom: "0.5rem" }}>
-        <strong>{count}</strong> selection(s) downloaded as <code>selections.json</code>.
-      </p>
-      <p className="text-muted" style={{ marginBottom: "0.5rem" }}>
-        Move it into <code>sportybet-local-tool/</code>, then run this yourself (it opens a real browser for you to log
-        into your own account — see that folder's README):
-      </p>
-      <pre className="panel" style={{ marginBottom: 0 }}>npm run create-ticket -- selections.json</pre>
+    <button type="button" className={`btn btn-sm ${added ? "" : "btn-primary"}`} onClick={() => add(item)} disabled={added}>
+      {added ? "Added ✓" : "Add to ticket"}
+    </button>
+  );
+}
+
+function ConfidenceBadge({ confidence }: { confidence?: number }) {
+  if (confidence === undefined) return null;
+  const level = confidence >= 70 ? "badge-success" : confidence >= 40 ? "" : "badge-error";
+  return (
+    <span className={`badge ${level}`} style={{ marginLeft: "0.5rem" }} title="How much data the model had to go on — not a probability this pick is correct">
+      Assurance: {confidence}/100
+    </span>
+  );
+}
+
+function TicketCart() {
+  const { items, remove, clear } = useCart();
+  const [downloadedCount, setDownloadedCount] = useState(0);
+
+  function generate() {
+    downloadJson(
+      "selections.json",
+      items.map(({ homeTeam, awayTeam, favoredOutcome, sportyBetSelection }) => ({ homeTeam, awayTeam, favoredOutcome, sportyBetSelection }))
+    );
+    setDownloadedCount(items.length);
+  }
+
+  return (
+    <div className="card" style={{ position: "sticky", top: "4.5rem", zIndex: 5 }}>
+      <div className="field-row" style={{ justifyContent: "space-between", marginBottom: items.length ? "0.75rem" : 0 }}>
+        <h3 style={{ margin: 0 }}>Ticket ({items.length})</h3>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {items.length > 0 && (
+            <button type="button" className="btn-ghost btn-sm" onClick={clear}>
+              clear
+            </button>
+          )}
+          <button type="button" className="btn btn-primary btn-sm" onClick={generate} disabled={items.length === 0}>
+            Generate ticket
+          </button>
+        </div>
+      </div>
+
+      {items.map((item) => (
+        <div key={item.sportyBetSelection.eventId} className="field-row" style={{ justifyContent: "space-between", marginBottom: "0.25rem" }}>
+          <span>
+            {item.homeTeam} v {item.awayTeam} — <strong>{item.favoredOutcome}</strong>
+            <ConfidenceBadge confidence={item.confidence} />
+          </span>
+          <button type="button" className="btn-ghost btn-sm" onClick={() => remove(item.sportyBetSelection.eventId)}>
+            remove
+          </button>
+        </div>
+      ))}
+
+      {downloadedCount > 0 && (
+        <div className="card" style={{ background: "var(--color-success-bg)", borderColor: "var(--color-success)", marginTop: "0.75rem", marginBottom: 0 }}>
+          <p style={{ marginBottom: "0.5rem" }}>
+            <strong>{downloadedCount}</strong> selection(s) downloaded as <code>selections.json</code>.
+          </p>
+          <p className="text-muted" style={{ marginBottom: "0.5rem" }}>
+            Move it into <code>sportybet-local-tool/</code>, then run this yourself (it opens a real browser for you to
+            log into your own account — see that folder's README):
+          </p>
+          <pre className="panel" style={{ marginBottom: 0 }}>npm run create-ticket -- selections.json</pre>
+        </div>
+      )}
     </div>
   );
+}
+
+// marketId "1", outcomeId 1/2/3 for home/draw/away — same inferred SportyBet
+// 1X2 mapping used server-side (see build-ticket's comment on where this
+// came from).
+const OUTCOME_ID_BY_RESULT: Record<string, string> = { Home: "1", Draw: "2", Away: "3" };
+
+interface AnalyzedSelection {
+  selection: {
+    homeTeam: string;
+    awayTeam: string;
+    market: string;
+    outcomeLabel: string;
+    odds: number;
+    eventId: string;
+    marketId: string;
+  };
+  supported: boolean;
+  reason?: string;
+  league?: string | null;
+  panelText?: string;
+  explanation?: string;
+  confidence?: number;
+  favoredOutcome?: string;
+  agreesWithSlip?: boolean;
+}
+
+interface AnalyzeCodeResponse {
+  code: string;
+  selectionCount: number;
+  analyzedCount: number;
+  results: AnalyzedSelection[];
 }
 
 function CodeAnalyzer() {
@@ -124,14 +213,36 @@ function CodeAnalyzer() {
           </p>
           {result.results.map((r, i) => (
             <div key={i} className="card">
-              <strong>
-                {r.selection.homeTeam} v {r.selection.awayTeam}
-              </strong>{" "}
-              — {r.selection.market}: {r.selection.outcomeLabel} @ {r.selection.odds}
+              <div className="field-row" style={{ justifyContent: "space-between" }}>
+                <strong>
+                  {r.selection.homeTeam} v {r.selection.awayTeam}
+                </strong>
+                {r.supported && r.favoredOutcome && r.selection.market === "1X2" && (
+                  <AddToTicketButton
+                    item={{
+                      homeTeam: r.selection.homeTeam,
+                      awayTeam: r.selection.awayTeam,
+                      favoredOutcome: r.favoredOutcome,
+                      confidence: r.confidence,
+                      sportyBetSelection: {
+                        eventId: r.selection.eventId,
+                        marketId: r.selection.marketId,
+                        outcomeId: OUTCOME_ID_BY_RESULT[r.favoredOutcome],
+                        // Only trustworthy if our pick matches what was actually
+                        // priced in the slip — for a different (disagreeing) pick,
+                        // this system doesn't have fresh odds for that outcome.
+                        odds: r.agreesWithSlip ? r.selection.odds : undefined,
+                      },
+                    }}
+                  />
+                )}
+              </div>
+              {r.selection.market}: {r.selection.outcomeLabel} @ {r.selection.odds}
               {!r.supported && <p className="text-muted">Not analyzed: {r.reason}</p>}
               {r.supported && (
                 <>
                   <pre className="panel">{r.panelText}</pre>
+                  {r.explanation && <p className="text-muted">{r.explanation}</p>}
                   <p className={r.agreesWithSlip ? "text-success" : "text-error"} style={{ fontWeight: 600, marginBottom: 0 }}>
                     {r.agreesWithSlip
                       ? `Our analysis agrees — favors ${r.favoredOutcome}`
@@ -154,10 +265,12 @@ interface AutoTicketResult {
   supported: boolean;
   reason?: string;
   favoredOutcome?: string;
+  confidence?: number;
+  explanation?: string;
   homeWinProbability?: number;
   drawProbability?: number;
   awayWinProbability?: number;
-  sportyBetSelection?: { eventId: string; marketId: string; outcomeId: string; odds?: number };
+  sportyBetSelection?: SportyBetSelectionRef;
 }
 
 interface AutoTicketResponse {
@@ -172,26 +285,22 @@ interface AutoTicketResponse {
 const ALL_LEAGUES = "All";
 
 // The actual requested flow: analyze EVERYTHING SportyBet has posted for a
-// league (no pre-filtering, no manual entry), let the user pick which
-// analyzed matches they actually want via checkboxes, then generate a ticket
-// from only those. "Generate" downloads selections.json rather than a real
-// booking code directly — minting an actual code needs an authenticated
-// SportyBet session, which only sportybet-local-tool (running on the user's
-// own machine, with their own login) can do; this is the handoff point.
+// league (no pre-filtering, no manual entry), then "Add to ticket" per match
+// (or select several via checkbox and add them all at once) puts it in the
+// shared cart above — Generate there produces the download.
 function AutoTicket() {
+  const { add } = useCart();
   const [league, setLeague] = useState<League | typeof ALL_LEAGUES>(ALL_LEAGUES);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AutoTicketResponse | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [downloadedCount, setDownloadedCount] = useState(0);
 
   async function pull() {
     setLoading(true);
     setError(null);
     setData(null);
     setSelected(new Set());
-    setDownloadedCount(0);
     try {
       const response = await fetch(`/api/sportybet/auto-ticket?league=${encodeURIComponent(league)}`);
       const body = await response.json();
@@ -211,16 +320,14 @@ function AutoTicket() {
     setSelected(next);
   }
 
-  function generateTicket() {
+  function addSelectedToTicket() {
     if (!data) return;
-    const chosen = data.results.filter((_, i) => selected.has(i));
-    const payload = chosen
-      .filter((r): r is AutoTicketResult & { sportyBetSelection: NonNullable<AutoTicketResult["sportyBetSelection"]> } =>
-        Boolean(r.sportyBetSelection)
+    data.results
+      .filter((_, i) => selected.has(i))
+      .filter((r): r is AutoTicketResult & { sportyBetSelection: SportyBetSelectionRef; favoredOutcome: string } =>
+        Boolean(r.sportyBetSelection && r.favoredOutcome)
       )
-      .map((r) => ({ homeTeam: r.homeTeam, awayTeam: r.awayTeam, favoredOutcome: r.favoredOutcome, sportyBetSelection: r.sportyBetSelection }));
-    downloadJson("selections.json", payload);
-    setDownloadedCount(payload.length);
+      .forEach((r) => add({ homeTeam: r.homeTeam, awayTeam: r.awayTeam, favoredOutcome: r.favoredOutcome, confidence: r.confidence, sportyBetSelection: r.sportyBetSelection }));
   }
 
   const supportedIndexes = data ? data.results.map((r, i) => (r.supported ? i : -1)).filter((i) => i >= 0) : [];
@@ -230,7 +337,7 @@ function AutoTicket() {
       <h2>Pull today's board and analyze</h2>
       <p className="text-muted">
         No typing — this pulls every match SportyBet is actually offering for a league right now and analyzes all of
-        it. Pick the ones you want, then generate a ticket from just those.
+        it. Add the ones you want to the ticket above.
       </p>
 
       <div className="field-row">
@@ -277,14 +384,12 @@ function AutoTicket() {
                 >
                   Select all analyzed
                 </button>
-                <button type="button" className="btn btn-primary btn-sm" onClick={generateTicket} disabled={selected.size === 0}>
-                  Generate ticket ({selected.size})
+                <button type="button" className="btn btn-primary btn-sm" onClick={addSelectedToTicket} disabled={selected.size === 0}>
+                  Add {selected.size} to ticket
                 </button>
               </div>
             </div>
           )}
-
-          <LocalToolHandoff count={downloadedCount} />
 
           {data.results.map((r, i) => (
             <div key={i} className="card" style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
@@ -298,17 +403,28 @@ function AutoTicket() {
                 />
               )}
               <div style={{ flex: 1 }}>
-                <strong>
-                  {r.homeTeam} v {r.awayTeam}
-                </strong>
-                {r.league && <span className="text-muted"> — {r.league}</span>}
+                <div className="field-row" style={{ justifyContent: "space-between" }}>
+                  <strong>
+                    {r.homeTeam} v {r.awayTeam}
+                    {r.league && <span className="text-muted"> — {r.league}</span>}
+                  </strong>
+                  {r.supported && r.favoredOutcome && r.sportyBetSelection && (
+                    <AddToTicketButton
+                      item={{ homeTeam: r.homeTeam, awayTeam: r.awayTeam, favoredOutcome: r.favoredOutcome, confidence: r.confidence, sportyBetSelection: r.sportyBetSelection }}
+                    />
+                  )}
+                </div>
                 {!r.supported && <p className="text-muted" style={{ marginBottom: 0 }}>Not analyzed: {r.reason}</p>}
                 {r.supported && (
-                  <p style={{ marginBottom: 0 }}>
-                    Favored: <strong>{r.favoredOutcome}</strong> (H {((r.homeWinProbability ?? 0) * 100).toFixed(1)}% / D{" "}
-                    {((r.drawProbability ?? 0) * 100).toFixed(1)}% / A {((r.awayWinProbability ?? 0) * 100).toFixed(1)}%)
-                    {r.sportyBetSelection?.odds !== undefined ? ` @ ${r.sportyBetSelection.odds}` : ""}
-                  </p>
+                  <>
+                    <p style={{ marginBottom: 0 }}>
+                      Favored: <strong>{r.favoredOutcome}</strong> (H {((r.homeWinProbability ?? 0) * 100).toFixed(1)}% / D{" "}
+                      {((r.drawProbability ?? 0) * 100).toFixed(1)}% / A {((r.awayWinProbability ?? 0) * 100).toFixed(1)}%)
+                      {r.sportyBetSelection?.odds !== undefined ? ` @ ${r.sportyBetSelection.odds}` : ""}
+                      <ConfidenceBadge confidence={r.confidence} />
+                    </p>
+                    {r.explanation && <p className="text-muted" style={{ marginBottom: 0, fontSize: "0.85rem" }}>{r.explanation}</p>}
+                  </>
                 )}
               </div>
             </div>
@@ -319,7 +435,22 @@ function AutoTicket() {
   );
 }
 
+interface BuiltSelection {
+  homeTeam: string;
+  awayTeam: string;
+  league?: string;
+  error?: string;
+  favoredOutcome?: string;
+  confidence?: number;
+  explanation?: string;
+  homeWinProbability?: number;
+  drawProbability?: number;
+  awayWinProbability?: number;
+  sportyBetSelection?: SportyBetSelectionRef;
+}
+
 function TicketBuilder() {
+  const { add } = useCart();
   const [homeTeam, setHomeTeam] = useState("");
   const [awayTeam, setAwayTeam] = useState("");
   const [league, setLeague] = useState<League>("Premier League");
@@ -327,7 +458,6 @@ function TicketBuilder() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<BuiltSelection[] | null>(null);
-  const [downloadedCount, setDownloadedCount] = useState(0);
 
   function addMatch(e: React.FormEvent) {
     e.preventDefault();
@@ -345,7 +475,6 @@ function TicketBuilder() {
     setLoading(true);
     setError(null);
     setResults(null);
-    setDownloadedCount(0);
     try {
       const response = await fetch("/api/sportybet/build-ticket", {
         method: "POST",
@@ -361,16 +490,6 @@ function TicketBuilder() {
       setLoading(false);
     }
   }
-
-  function download() {
-    const resolved = (results ?? [])
-      .filter((r): r is Required<Pick<BuiltSelection, "sportyBetSelection">> & BuiltSelection => Boolean(r.sportyBetSelection))
-      .map((r) => ({ homeTeam: r.homeTeam, awayTeam: r.awayTeam, favoredOutcome: r.favoredOutcome, sportyBetSelection: r.sportyBetSelection }));
-    downloadJson("selections.json", resolved);
-    setDownloadedCount(resolved.length);
-  }
-
-  const resolvedCount = (results ?? []).filter((r) => r.sportyBetSelection).length;
 
   return (
     <section>
@@ -420,46 +539,65 @@ function TicketBuilder() {
         <div>
           {results.map((r, i) => (
             <div key={i} className="card">
-              <strong>
-                {r.homeTeam} v {r.awayTeam}
-              </strong>
+              <div className="field-row" style={{ justifyContent: "space-between" }}>
+                <strong>
+                  {r.homeTeam} v {r.awayTeam}
+                </strong>
+                {r.sportyBetSelection && r.favoredOutcome && (
+                  <AddToTicketButton
+                    item={{ homeTeam: r.homeTeam, awayTeam: r.awayTeam, favoredOutcome: r.favoredOutcome, confidence: r.confidence, sportyBetSelection: r.sportyBetSelection }}
+                  />
+                )}
+              </div>
               {r.error && <p className="text-error" style={{ marginBottom: 0 }}>{r.error}</p>}
               {r.sportyBetSelection && (
-                <p style={{ marginBottom: 0 }}>
-                  Favored: {r.favoredOutcome} (H {((r.homeWinProbability ?? 0) * 100).toFixed(1)}% / D{" "}
-                  {((r.drawProbability ?? 0) * 100).toFixed(1)}% / A {((r.awayWinProbability ?? 0) * 100).toFixed(1)}%) — eventId{" "}
-                  {r.sportyBetSelection.eventId}, market {r.sportyBetSelection.marketId}, outcome {r.sportyBetSelection.outcomeId}
-                  {r.sportyBetSelection.odds !== undefined ? ` @ ${r.sportyBetSelection.odds}` : ""}
-                </p>
+                <>
+                  <p style={{ marginBottom: 0 }}>
+                    Favored: {r.favoredOutcome} (H {((r.homeWinProbability ?? 0) * 100).toFixed(1)}% / D{" "}
+                    {((r.drawProbability ?? 0) * 100).toFixed(1)}% / A {((r.awayWinProbability ?? 0) * 100).toFixed(1)}%) — eventId{" "}
+                    {r.sportyBetSelection.eventId}, market {r.sportyBetSelection.marketId}, outcome {r.sportyBetSelection.outcomeId}
+                    {r.sportyBetSelection.odds !== undefined ? ` @ ${r.sportyBetSelection.odds}` : ""}
+                    <ConfidenceBadge confidence={r.confidence} />
+                  </p>
+                  {r.explanation && <p className="text-muted" style={{ marginBottom: 0, fontSize: "0.85rem" }}>{r.explanation}</p>}
+                </>
               )}
             </div>
           ))}
-
-          {resolvedCount > 0 && (
-            <>
-              <button type="button" className="btn btn-primary" onClick={download}>
-                Download selections.json ({resolvedCount})
-              </button>
-              <LocalToolHandoff count={downloadedCount} />
-            </>
-          )}
         </div>
       )}
     </section>
   );
 }
 
+function CartProvider({ children }: { children: React.ReactNode }) {
+  const [items, setItems] = useState<CartItem[]>([]);
+
+  function add(item: CartItem) {
+    setItems((prev) => (prev.some((i) => i.sportyBetSelection.eventId === item.sportyBetSelection.eventId) ? prev : [...prev, item]));
+  }
+  function remove(eventId: string) {
+    setItems((prev) => prev.filter((i) => i.sportyBetSelection.eventId !== eventId));
+  }
+  function clear() {
+    setItems([]);
+  }
+
+  return <CartContext.Provider value={{ items, add, remove, clear }}>{children}</CartContext.Provider>;
+}
+
 export default function SportyBetPage() {
   return (
-    <>
+    <CartProvider>
       <h1>SportyBet Tools</h1>
       <p className="text-muted">
         Personal use only. Generating a new booking code needs your real login and happens in a separate local tool —
         see <code>sportybet-local-tool/README.md</code>.
       </p>
+      <TicketCart />
       <CodeAnalyzer />
       <AutoTicket />
       <TicketBuilder />
-    </>
+    </CartProvider>
   );
 }

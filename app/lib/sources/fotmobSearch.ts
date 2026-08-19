@@ -8,6 +8,8 @@
 // IMPORTANT: league names collide across countries ("League One" exists for
 // both England and Scotland, "Ligue 1" for France and Algeria) — never match
 // on name alone. Match on the numeric `leagueId` FotMob returns instead.
+import { fetchWithTimeout } from "../httpTimeout";
+
 const SEARCH_URL = "https://apigw.fotmob.com/searchapi/suggest";
 const HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" };
 
@@ -25,7 +27,7 @@ export interface FotmobLeagueSuggestion {
 }
 
 async function suggest(term: string): Promise<any> {
-  const response = await fetch(`${SEARCH_URL}?term=${encodeURIComponent(term)}`, { headers: HEADERS });
+  const response = await fetchWithTimeout(`${SEARCH_URL}?term=${encodeURIComponent(term)}`, { headers: HEADERS }, 5000);
   if (!response.ok) throw new Error(`FotMob search failed: ${response.status}`);
   return response.json();
 }
@@ -52,38 +54,49 @@ export async function searchFotmobLeagues(term: string): Promise<FotmobLeagueSug
 }
 
 // CONFIRMED live (2026-08-18): FotMob's search is fairly literal and misses on
-// the fuller club-name conventions other sources use — "FK Zenit Saint
-// Petersburg" (SportyBet's naming) returns zero results, but "Zenit" alone
-// finds "Zenit St. Petersburg" immediately. This cost real, well-covered
-// clubs (Zenit, Spartak Moscow, Krasnodar) analysis when pulling SportyBet's
-// full board — not a data gap, a name-matching gap. This fallback chain
-// (full name → strip a generic prefix token → first word of what's left)
-// recovered all 7 real failures tested. It won't catch everything — this is
-// a bounded heuristic, not a real fuzzy-matching system — but it's a
-// meaningful, verified improvement over a single literal search.
-const GENERIC_PREFIXES = new Set(["FK", "PFK", "RFK", "FC", "SC", "AC", "AS", "CD", "CA", "SS", "UD", "CF", "CS"]);
+// the fuller club-name conventions other sources use. Verified failures and
+// fixes, all real (not guessed):
+//   "FK Zenit Saint Petersburg" (0 results) → "Zenit" → Zenit St. Petersburg
+//   "PAE PS Kalamata" (0, TWO leading tokens) → "Kalamata" → resolves
+//   "Cerro Porteno SRL" (0, TRAILING token) → "Cerro Porteno" → resolves
+//   "SE Palmeiras SP SRL" (0, leading AND two trailing tokens) → "Palmeiras"
+// A single-token, leading-only strip (the original version of this function)
+// missed the last three. Iteratively stripping generic tokens from BOTH ends
+// fixed all of them. Still a bounded heuristic, not real fuzzy matching —
+// "Panaitolikos" vs FotMob's "Panetolikos" (a genuine transliteration
+// difference) and a couple of others stayed unresolved even after this, and
+// that's an honest remaining gap, not something this approach can fix.
+const GENERIC_TOKENS = new Set([
+  "FK", "PFK", "RFK", "FC", "SC", "AC", "AS", "CD", "CA", "SS", "UD", "CF", "CS",
+  "AE", "AO", "APS", "PAE", "PAS", "PS", "SE", "EC", "AD", "CE", "SRL", "SP",
+]);
 
-function stripLeadingPrefix(name: string): string | undefined {
-  const tokens = name.split(" ");
-  if (tokens.length <= 1) return undefined;
-  const first = tokens[0].toUpperCase().replace(/\.$/, "");
-  return GENERIC_PREFIXES.has(first) ? tokens.slice(1).join(" ") : undefined;
+function stripGenericTokens(name: string): string {
+  let tokens = name.split(" ");
+  while (tokens.length > 1 && GENERIC_TOKENS.has(tokens[0].toUpperCase().replace(/\.$/, ""))) {
+    tokens = tokens.slice(1);
+  }
+  while (tokens.length > 1 && GENERIC_TOKENS.has(tokens[tokens.length - 1].toUpperCase().replace(/\.$/, ""))) {
+    tokens = tokens.slice(0, -1);
+  }
+  return tokens.join(" ");
 }
 
 export async function searchFotmobTeamsRobust(term: string): Promise<FotmobTeamSuggestion[]> {
   const direct = await searchFotmobTeams(term);
   if (direct.length > 0) return direct;
 
-  const stripped = stripLeadingPrefix(term);
-  if (stripped) {
+  const stripped = stripGenericTokens(term);
+  if (stripped !== term) {
     const strippedResults = await searchFotmobTeams(stripped);
     if (strippedResults.length > 0) return strippedResults;
   }
 
-  const base = stripped ?? term;
-  const firstWord = base.split(" ")[0];
-  if (firstWord && firstWord !== base) {
-    return searchFotmobTeams(firstWord);
+  const firstWord = stripped.split(" ")[0];
+  if (firstWord && firstWord !== stripped) {
+    const firstWordResults = await searchFotmobTeams(firstWord);
+    if (firstWordResults.length > 0) return firstWordResults;
   }
+
   return [];
 }

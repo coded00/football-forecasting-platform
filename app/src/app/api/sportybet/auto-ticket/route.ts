@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { LeagueName } from "@lib/config";
+import { computeMomentum } from "@lib/analytics/momentum";
 import { mergeMatches } from "@lib/analytics/mergeMatches";
+import { computeFormWindows } from "@lib/analytics/teamStats";
 import { fetchTeamDataByName } from "@lib/fetchAll";
 import { predictMatch } from "@lib/prediction/predictMatch";
+import { explainForecast } from "@lib/presentation/explanation";
+import { computeModelConfidence } from "@lib/presentation/modelConfidence";
 import { listSportyBetMatchesForLeague } from "@lib/sources/sportybet";
 
 const VALID_LEAGUES: LeagueName[] = ["Premier League", "Championship", "League One", "La Liga", "Ligue 1"];
@@ -16,7 +20,10 @@ const OUTCOME_ID_BY_RESULT: Record<"Home" | "Draw" | "Away", string> = { Home: "
 // live matches at a time, and each one costs two FotMob search+fetch round
 // trips to analyze. Uncapped, that risks a slow response or a Netlify
 // Function timeout. Reported explicitly below, never silently dropped.
-const MAX_MATCHES_WHEN_ALL = 30;
+// Live-tested (2026-08-18): 20 matches took ~10s, right at Netlify's default
+// function timeout. Tightened from 30 to 18 for real safety margin rather
+// than an arbitrary round number.
+const MAX_MATCHES_WHEN_ALL = 18;
 
 // The point of this endpoint: nobody types a team name. It pulls whatever
 // SportyBet is actually offering — a specific league, or literally everything
@@ -74,6 +81,21 @@ export async function GET(request: NextRequest) {
         }
 
         const forecast = predictMatch(homeMerged, awayMerged);
+        const confidence = computeModelConfidence(forecast.homeStats, forecast.awayStats, forecast);
+        const homeFormWindows = computeFormWindows(homeMerged);
+        const awayFormWindows = computeFormWindows(awayMerged);
+        const homeMomentum = computeMomentum(homeFormWindows.last5, homeFormWindows.overall);
+        const awayMomentum = computeMomentum(awayFormWindows.last5, awayFormWindows.overall);
+        const explanation = explainForecast(
+          sportyMatch.homeTeam,
+          sportyMatch.awayTeam,
+          forecast.homeStats,
+          forecast.awayStats,
+          homeMomentum,
+          awayMomentum,
+          forecast
+        );
+
         const favoredOutcome: "Home" | "Draw" | "Away" =
           forecast.homeWinProbability >= forecast.drawProbability && forecast.homeWinProbability >= forecast.awayWinProbability
             ? "Home"
@@ -87,6 +109,8 @@ export async function GET(request: NextRequest) {
           league: home.resolvedLeague ?? home.fotmobLeagueName ?? away.resolvedLeague ?? away.fotmobLeagueName ?? null,
           supported: true,
           favoredOutcome,
+          confidence,
+          explanation,
           homeWinProbability: forecast.homeWinProbability,
           drawProbability: forecast.drawProbability,
           awayWinProbability: forecast.awayWinProbability,

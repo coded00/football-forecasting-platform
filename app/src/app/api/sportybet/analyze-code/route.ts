@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { computeMomentum } from "@lib/analytics/momentum";
 import { mergeMatches } from "@lib/analytics/mergeMatches";
+import { computeFormWindows } from "@lib/analytics/teamStats";
 import { fetchTeamDataByName } from "@lib/fetchAll";
 import { predictMatch } from "@lib/prediction/predictMatch";
+import { explainForecast } from "@lib/presentation/explanation";
 import { formatForecastPanel } from "@lib/presentation/forecastPanel";
 import { computeModelConfidence } from "@lib/presentation/modelConfidence";
 import { decodeBookingCode, type SportyBetSelection } from "@lib/sources/sportybet";
@@ -32,6 +35,20 @@ async function analyzeSelection(selection: SportyBetSelection) {
   const confidence = computeModelConfidence(forecast.homeStats, forecast.awayStats, forecast);
   const panelText = formatForecastPanel(selection.homeTeam, selection.awayTeam, forecast, confidence);
 
+  const homeFormWindows = computeFormWindows(homeMerged);
+  const awayFormWindows = computeFormWindows(awayMerged);
+  const homeMomentum = computeMomentum(homeFormWindows.last5, homeFormWindows.overall);
+  const awayMomentum = computeMomentum(awayFormWindows.last5, awayFormWindows.overall);
+  const explanation = explainForecast(
+    selection.homeTeam,
+    selection.awayTeam,
+    forecast.homeStats,
+    forecast.awayStats,
+    homeMomentum,
+    awayMomentum,
+    forecast
+  );
+
   const favoredOutcome =
     forecast.homeWinProbability >= forecast.drawProbability && forecast.homeWinProbability >= forecast.awayWinProbability
       ? "Home"
@@ -46,6 +63,7 @@ async function analyzeSelection(selection: SportyBetSelection) {
     forecast,
     confidence,
     panelText,
+    explanation,
     agreesWithSlip: selection.outcomeLabel.toLowerCase().includes(favoredOutcome.toLowerCase()),
     favoredOutcome,
   };

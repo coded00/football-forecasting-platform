@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from "../httpTimeout";
 import type { NormalizedMatch } from "./types";
 
 const BASE_URL = "https://v3.football.api-sports.io";
@@ -13,7 +14,7 @@ async function apiFootballGet<T>(path: string, params: Record<string, string | n
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    const response = await fetch(url, { headers: { "x-apisports-key": apiKey() } });
+    const response = await fetchWithTimeout(url, { headers: { "x-apisports-key": apiKey() } });
     if (response.status === 429) {
       await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 1000));
       continue;

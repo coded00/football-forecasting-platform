@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "../httpTimeout";
+
 const HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" };
 
 // FotMob's `/api/*` endpoints (what earlier versions of this file targeted) were
@@ -9,7 +11,7 @@ const HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)
 // each). Parsing that is more robust than guessing internal API paths, since
 // it's the same mechanism Next.js itself uses, not FotMob-specific.
 export async function fetchFotmobNextData(path: string): Promise<any> {
-  const response = await fetch(`https://www.fotmob.com${path}`, { headers: HEADERS });
+  const response = await fetchWithTimeout(`https://www.fotmob.com${path}`, { headers: HEADERS });
   if (!response.ok) throw new Error(`FotMob fetch failed: ${response.status} ${path}`);
   const html = await response.text();
   const match = html.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);

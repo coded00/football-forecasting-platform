@@ -11,6 +11,8 @@
 //   eventId/marketId/outcomeId/odds query params, no auth required.
 // - Generating a NEW share code requires an authenticated session and has no
 //   confirmed plain-HTTP path — see the separate local automation tool.
+import { fetchWithTimeout } from "../httpTimeout";
+
 const BASE_URL = "https://www.sportybet.com/ng/lite";
 const HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" };
 
@@ -62,7 +64,7 @@ function decodeSelections(html: string): SportyBetSelection[] {
 }
 
 export async function decodeBookingCode(code: string): Promise<SportyBetSelection[]> {
-  const response = await fetch(`${BASE_URL}/betslip`, {
+  const response = await fetchWithTimeout(`${BASE_URL}/betslip`, {
     method: "POST",
     headers: { ...HEADERS, "Content-Type": "application/x-www-form-urlencoded" },
     body: `shareCode=1&shareCodeContent=${encodeURIComponent(code)}`,
@@ -130,7 +132,7 @@ function parseTeamsFromBlock(block: string): { homeTeam: string; awayTeam: strin
 }
 
 async function fetchScopedListingHtml(league?: string): Promise<string | undefined> {
-  const response = await fetch(`${BASE_URL}/preMatch?sportId=sr:sport:1&timeId=1`, { headers: HEADERS });
+  const response = await fetchWithTimeout(`${BASE_URL}/preMatch?sportId=sr:sport:1&timeId=1`, { headers: HEADERS });
   if (!response.ok) throw new Error(`SportyBet match listing request failed: ${response.status}`);
   const html = await response.text();
 

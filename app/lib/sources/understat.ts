@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from "../httpTimeout";
 import type { NormalizedMatch } from "./types";
 
 // CONFIRMED DEAD END (Phase 6 live test, 2026-08-16): a direct HTTP fetch of
@@ -40,7 +41,7 @@ function extractVariable(html: string, variableName: string): unknown {
 // resolving canonical team name -> slug is 1.4's job, not this fetcher's.
 export async function fetchUnderstatTeamMatches(teamSlug: string, seasonStartYear: number): Promise<NormalizedMatch[]> {
   const url = `https://understat.com/team/${teamSlug}/${seasonStartYear}`;
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url);
   if (!response.ok) throw new Error(`Understat fetch failed: ${response.status}`);
   const html = await response.text();
 
